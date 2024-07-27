@@ -1,17 +1,28 @@
 # Defining VM Volume
 resource "libvirt_volume" "alma9_qcow2" {
-  name = var.alma9_volume_name
-  pool = var.alma9_volume_pool
+  name   = var.alma9_volume_name
+  pool   = var.alma9_volume_pool
   source = var.alma9_volume_source
   format = var.alma9_volume_format
 }
 
 data "template_file" "user_data" {
-  template = file("${path.module}/user-data")
+  template = file("${path.module}/user-data.tpl")
+  vars = {
+    encoded_selinux       = base64encode(var.selinux_content)
+    encoded_eth0          = base64encode(var.eth0_content)
+    encoded_grub          = base64encode(var.grub_content)
+    encoded_rc_local      = base64encode(var.rc_local_content)
+    encoded_rc_local_once = base64encode(var.rc_local_once_content)
+    serra_ssh_keys        = jsonencode(var.serra_ssh_keys)
+    root_ssh_keys         = jsonencode(var.root_ssh_keys)
+    serra_passwd          = var.serra_passwd
+    root_passwd           = var.root_passwd
+  }
 }
 
 data "template_file" "meta_data" {
-  template = file("${path.module}/meta-data")
+  template = file("${path.module}/meta-data.tpl")
   vars = {
     instance-id    = "${var.alma9_name}"
     local-hostname = "${var.alma9_name}"

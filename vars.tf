@@ -43,3 +43,50 @@ variable "alma9_domain_vcpu" {
 # VM Network name
 variable "alma9_network_name" {
 }
+
+variable "selinux_content" {
+  description = "Content for SELinux configuration"
+  type        = string
+}
+
+variable "eth0_content" {
+  description = "Content for eth0 network script"
+  type        = string
+}
+
+variable "grub_content" {
+  description = "Content for GRUB configuration"
+  type        = string
+}
+
+variable "rc_local_content" {
+  description = "Content for rc.local script"
+  type        = string
+}
+
+
+variable "rc_local_once_content" {
+  description = "Content for rc.local script"
+  type        = string
+}
+
+variable "serra_passwd" {
+  description = "user password"
+  type        = string
+
+}
+variable "root_passwd" {
+  description = "root password"
+  type        = string
+
+}
+
+variable "serra_ssh_keys" {
+  description = "SSH authorized keys for user serra"
+  type        = list(string)
+}
+
+variable "root_ssh_keys" {
+  description = "SSH authorized keys for user root"
+  type        = list(string)
+}

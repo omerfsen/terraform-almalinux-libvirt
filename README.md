@@ -7,7 +7,7 @@ Terraform to install AlmaLinux 9 to KVM based systems using libvirt provider
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.8.3 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.9.3 |
 | <a name="requirement_libvirt"></a> [libvirt](#requirement\_libvirt) | 0.7.6 |
 
 ## Providers
@@ -33,12 +33,15 @@ Terraform to install AlmaLinux 9 to KVM based systems using libvirt provider
 | <a name="input_alma9_volume_pool"></a> [alma9\_volume\_pool](#input\_alma9\_volume\_pool) | Pool to locate VM | `any` | yes |
 | <a name="input_alma9_volume_size"></a> [alma9\_volume\_size](#input\_alma9\_volume\_size) | n/a | `any` | yes |
 | <a name="input_alma9_volume_source"></a> [alma9\_volume\_source](#input\_alma9\_volume\_source) | alma linux Qcow2 disk image | `any` | yes |
-
-## Outputs
-
-| Name | Description |
-|------|-------------|
-| <a name="output_ip"></a> [ip](#output\_ip) | Output Server IP |
+| <a name="input_eth0_content"></a> [eth0\_content](#input\_eth0\_content) | Content for eth0 network script | `string` | yes |
+| <a name="input_grub_content"></a> [grub\_content](#input\_grub\_content) | Content for GRUB configuration | `string` | yes |
+| <a name="input_rc_local_content"></a> [rc\_local\_content](#input\_rc\_local\_content) | Content for rc.local script | `string` | yes |
+| <a name="input_rc_local_once_content"></a> [rc\_local\_once\_content](#input\_rc\_local\_once\_content) | Content for rc.local script | `string` | yes |
+| <a name="input_root_passwd"></a> [root\_passwd](#input\_root\_passwd) | root password | `string` | yes |
+| <a name="input_root_ssh_keys"></a> [root\_ssh\_keys](#input\_root\_ssh\_keys) | SSH authorized keys for user root | `list(string)` | yes |
+| <a name="input_selinux_content"></a> [selinux\_content](#input\_selinux\_content) | Content for SELinux configuration | `string` | yes |
+| <a name="input_serra_passwd"></a> [serra\_passwd](#input\_serra\_passwd) | user password | `string` | yes |
+| <a name="input_serra_ssh_keys"></a> [serra\_ssh\_keys](#input\_serra\_ssh\_keys) | SSH authorized keys for user serra | `list(string)` | yes |
 <!-- END_TF_DOCS -->
 
 ## SSH-Audit
