@@ -12,7 +12,7 @@ ssh_pwauth: true
 disable_root: false
 
 # password can be generated with:
-# echo "test" | mkpasswd -m sha-512 -s 
+# echo "test" | mkpasswd -m sha-512 -s
 
 users:
   - default

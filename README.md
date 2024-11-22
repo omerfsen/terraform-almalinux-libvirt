@@ -7,14 +7,14 @@ Terraform to install AlmaLinux 9 to KVM based systems using libvirt provider
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.9.3 |
-| <a name="requirement_libvirt"></a> [libvirt](#requirement\_libvirt) | 0.7.6 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.9.8 |
+| <a name="requirement_libvirt"></a> [libvirt](#requirement\_libvirt) | 0.8.1 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_libvirt"></a> [libvirt](#provider\_libvirt) | 0.7.6 |
+| <a name="provider_libvirt"></a> [libvirt](#provider\_libvirt) | 0.8.1 |
 | <a name="provider_template"></a> [template](#provider\_template) | n/a |
 
 ## Inputs
