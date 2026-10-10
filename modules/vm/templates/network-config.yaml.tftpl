@@ -1,0 +1,33 @@
+# cloud-init network-config v2. Rendered by NetworkManager on EL9+; this is
+# what replaced writing /etc/sysconfig/network-scripts/ifcfg-eth0 by hand,
+# which EL9 deprecated and EL10 removed.
+version: 2
+ethernets:
+  primary:
+    match:
+      macaddress: "${mac}"
+    set-name: eth0
+%{ if ip == null ~}
+    dhcp4: true
+    dhcp6: false
+%{ else ~}
+    dhcp4: false
+    dhcp6: false
+    addresses:
+      - ${ip}
+%{ if gateway != "" ~}
+    routes:
+      # 0.0.0.0/0, not netplan's "to: default": cloud-init's own network_state
+      # parser rejects the shorthand with "Address default is not a valid ip
+      # network" and then silently falls back to DHCP.
+      - to: 0.0.0.0/0
+        via: ${gateway}
+%{ endif ~}
+%{ if length(nameservers) > 0 ~}
+    nameservers:
+      addresses: [${join(", ", nameservers)}]
+%{ if length(search_domains) > 0 ~}
+      search: [${join(", ", search_domains)}]
+%{ endif ~}
+%{ endif ~}
+%{ endif ~}

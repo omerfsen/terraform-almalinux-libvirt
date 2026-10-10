@@ -1,0 +1,198 @@
+#cloud-config
+hostname: ${hostname}
+fqdn: ${hostname}
+preserve_hostname: false
+timezone: ${timezone}
+
+%{ if include_default_user || length(users) > 0 ~}
+users:
+%{ if include_default_user ~}
+  # The cloud image's own user (almalinux / rocky), which the original kept
+  # with a bare "- default". Dropping it locks you out of the documented
+  # fallback login.
+  - default
+%{ endif ~}
+%{ for u in users ~}
+  - name: ${u.name}
+    shell: ${u.shell}
+    lock_passwd: ${u.password_hash == null ? "true" : "false"}
+%{ if u.password_hash != null ~}
+    passwd: "${u.password_hash}"
+%{ endif ~}
+%{ if length(u.groups) > 0 ~}
+    groups: [${join(", ", u.groups)}]
+%{ endif ~}
+%{ if u.sudo ~}
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+%{ endif ~}
+    ssh_authorized_keys:
+%{ for k in concat(u.ssh_authorized_keys, extra_keys) ~}
+      - "${k}"
+%{ endfor ~}
+%{ endfor ~}
+%{ endif ~}
+
+%{ if root_pw != null ~}
+chpasswd:
+  expire: false
+  list:
+    - root:${root_pw}
+%{ endif ~}
+
+%{ if length(root_keys) > 0 ~}
+ssh_authorized_keys:
+%{ for k in root_keys ~}
+  - "${k}"
+%{ endfor ~}
+%{ endif ~}
+
+disable_root: ${permit_root_ssh ? "false" : "true"}
+ssh_pwauth: ${ssh_password_auth}
+
+package_update: true
+package_upgrade: ${package_upgrade}
+%{ if length(packages) > 0 ~}
+packages:
+%{ for p in packages ~}
+  - ${p}
+%{ endfor ~}
+%{ endif ~}
+
+# Grow the root filesystem into whatever disk_size was asked for.
+growpart:
+  mode: auto
+  devices: ["/"]
+  ignore_growroot_disabled: false
+resize_rootfs: noblock
+
+write_files:
+%{ if selinux_mode != "enforcing" ~}
+  # /etc/selinux/config, not /etc/sysconfig/selinux. The original wrote the
+  # latter, which is only a compatibility symlink on EL9 and is not guaranteed
+  # on EL10 - writing it there would create a plain file nothing reads.
+  - path: /etc/selinux/config
+    permissions: "0644"
+    content: |
+      SELINUX=${selinux_mode}
+      SELINUXTYPE=targeted
+%{ endif ~}
+  # disable_root only prepends a refusing command to root's authorized_keys;
+  # sshd still advertises "permitrootlogin without-password". Say it properly.
+  - path: /etc/ssh/sshd_config.d/99-hardening.conf
+    permissions: "0600"
+    content: |
+      ${sshd_dropin}
+%{ if console_show_ip ~}
+  # agetty expands \4{eth0} to the interface's IPv4 at the login prompt, so a
+  # console session shows the address without logging in. Both files: /etc/issue
+  # is the local console, /etc/issue.net the pre-auth ssh banner.
+  - path: /etc/issue
+    permissions: "0644"
+    content: |
+      My IP address: \4{${primary_interface}}  \n \l
+
+  - path: /etc/issue.net
+    permissions: "0644"
+    content: |
+      My IP address: \4{${primary_interface}}  \n \l
+%{ endif ~}
+%{ if ipv6_disable ~}
+  # Belt and braces with the kernel argument. A drop-in rather than
+  # overwriting /etc/sysctl.conf, which the original did - that discards
+  # whatever the distro ships in it.
+  - path: /etc/sysctl.d/99-disable-ipv6.conf
+    permissions: "0644"
+    content: |
+      net.ipv6.conf.all.disable_ipv6 = 1
+      net.ipv6.conf.default.disable_ipv6 = 1
+%{ endif ~}
+  - path: /etc/systemd/journald.conf.d/99-console.conf
+    permissions: "0644"
+    content: |
+      [Journal]
+      ForwardToConsole=no
+%{ if rc_local_every_boot ~}
+  # The original shipped this as /etc/rc.d/rc.local, so it ran on EVERY boot.
+  # Note what that means: it deletes and regenerates the ssh host keys each
+  # time, so the host fingerprint changes on every reboot and known_hosts
+  # breaks. Kept for parity, off by default, because that reads as a mistake
+  # rather than an intent.
+  - path: /etc/rc.d/rc.local
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      grub2-mkconfig -o /boot/grub2/grub.cfg
+      dnf -y upgrade
+      rm -f /etc/ssh/ssh_host_*
+      ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N ""
+      ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N ""
+      chgrp ssh_keys /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_rsa_key
+      chmod g+r /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_rsa_key
+%{ endif ~}
+
+runcmd:
+%{ if selinux_mode == "disabled" ~}
+  # SELinux can only go to disabled across a reboot.
+  - [ grubby, --update-kernel=ALL, --args=selinux=0 ]
+%{ endif ~}
+%{ if harden_ssh ~}
+  # https://www.ssh-audit.com/hardening_guides.html#rhel8 - the guide has no
+  # RHEL9 or RHEL10 section, so rhel8 is the newest guidance that exists.
+  # Host keys are regenerated because every VM from
+  # the same image would otherwise share the image's keys.
+  - [ bash, -c, "rm -f /etc/ssh/ssh_host_*" ]
+  - [ bash, -c, "ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N ''" ]
+  - [ bash, -c, "ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N ''" ]
+  - [ bash, -c, "chgrp ssh_keys /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_rsa_key && chmod g+r /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_rsa_key" ]
+  - [ bash, -c, "awk '$5 >= 3071' /etc/ssh/moduli > /etc/ssh/moduli.safe && mv -f /etc/ssh/moduli.safe /etc/ssh/moduli" ]
+  - [ bash, -c, "sed -i 's|^HostKey /etc/ssh/ssh_host_ecdsa_key$|#HostKey /etc/ssh/ssh_host_ecdsa_key|' /etc/ssh/sshd_config" ]
+  - [ bash, -c, "printf '%s\\n' 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr' 'MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com' 'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256' 'GSSAPIKexAlgorithms gss-curve25519-sha256-' 'HostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-512' 'PubkeyAcceptedAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-512' 'CASignatureAlgorithms ecdsa-sha2-nistp256,sk-ecdsa-sha2-nistp256@openssh.com,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-ed25519,sk-ssh-ed25519@openssh.com,rsa-sha2-256,rsa-sha2-512' 'RequiredRSASize 2048' > /etc/crypto-policies/back-ends/opensshserver.config" ]
+  # sshd-keygen regenerates any missing host key at boot, so masking its ecdsa
+  # unit is what keeps the key gone rather than just deleted.
+  - [ bash, -c, "systemctl mask sshd-keygen@ecdsa.service" ]
+  - [ bash, -c, "rm -f /etc/ssh/ssh_host_ecdsa_key /etc/ssh/ssh_host_ecdsa_key.pub" ]
+  - [ systemctl, restart, sshd ]
+%{ endif ~}
+%{ if grub_serial_console || ipv6_disable || length(grub_cmdline_extra) > 0 ~}
+  # The old repo shipped a whole /etc/default/grub. Only the lines that
+  # actually differ from the cloud image are touched here, so a distro default
+  # that changes upstream is not frozen in by accident. crashkernel=auto is
+  # deliberately NOT carried over: EL9 ignores it.
+  - [ bash, -c, "sed -i '/^GRUB_CMDLINE_LINUX=/d;/^GRUB_TERMINAL=/d;/^GRUB_SERIAL_COMMAND=/d' /etc/default/grub" ]
+  - [ bash, -c, "printf '%s\\n' 'GRUB_CMDLINE_LINUX=\"${grub_cmdline}\"' >> /etc/default/grub" ]
+%{ if grub_serial_console ~}
+  - [ bash, -c, "printf '%s\\n' 'GRUB_TERMINAL=\"console serial\"' 'GRUB_SERIAL_COMMAND=\"serial --speed=115200\"' >> /etc/default/grub" ]
+%{ endif ~}
+  # grubby, not just grub2-mkconfig: EL9 boots via BootLoaderSpec, where the
+  # options live in /boot/loader/entries, and regenerating grub.cfg leaves an
+  # existing entry's kernel command line untouched. Verified: ipv6.disable=1
+  # reached /etc/default/grub but never /proc/cmdline without this.
+  - [ bash, -c, "grubby --update-kernel=ALL --args='${grub_cmdline}' || true" ]
+  - [ bash, -c, "grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 || grub2-mkconfig -o /boot/efi/EFI/*/grub.cfg >/dev/null 2>&1 || true" ]
+%{ endif ~}
+  - [ systemctl, enable, --now, qemu-guest-agent ]
+%{ if nm_keyfiles ~}
+  # cloud-init picks the sysconfig renderer on EL9 and writes
+  # /etc/sysconfig/network-scripts/ifcfg-eth0 - the same legacy file this repo
+  # used to hand-write. The renderer cannot be changed from user-data (it is
+  # chosen in the init-local stage, before user-data merges), so convert the
+  # result instead. Needs NetworkManager 1.40+; a no-op on EL10, which has no
+  # ifcfg files to migrate.
+  - [ bash, -c, "nmcli connection migrate || true" ]
+%{ endif ~}
+%{ for c in runcmd ~}
+  - ${c}
+%{ endfor ~}
+
+%{ if reboot_after_first_boot ~}
+# The old repo ended its run-once script with a bare `reboot`. cloud-init has
+# power_state for this: it waits for the rest of the run to finish first, so
+# the grub rebuild and the SELinux relabel are actually on disk before the
+# machine goes down. Only needed when something kernel- or SELinux-level
+# changed; leave it off and first boot is one reboot shorter.
+power_state:
+  mode: reboot
+  condition: true
+  delay: 0
+  message: "Rebooting once so the grub and SELinux changes take effect"
+%{ endif ~}
